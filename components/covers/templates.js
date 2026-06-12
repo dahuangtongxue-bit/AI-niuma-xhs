@@ -188,7 +188,32 @@ function V04({ d, p }) {
   );
 }
 
+
+/* V_PHOTO 图底大字报（生图层就位时由渲染器自动启用，不进模型可选清单） */
+function V_PHOTO({ d }) {
+  return (
+    <div style={frame({ bg: '#1B1B1B', ink: '#FFFFFF' }, { color: '#FFFFFF', justifyContent: 'flex-end' })}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        {d.bgDataUrl ? (
+          <img src={d.bgDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        ) : null}
+      </div>
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,.10) 30%, rgba(0,0,0,.46) 62%, rgba(0,0,0,.82) 100%)' }} />
+      <div style={{ position: 'relative', padding: '90px 100px 110px', display: 'flex', flexDirection: 'column', gap: 36 }}>
+        <div style={{ alignSelf: 'flex-start', border: '5px solid rgba(255,255,255,.92)', color: '#FFFFFF', borderRadius: 999, padding: '14px 42px', fontSize: 44, fontWeight: 800 }}>
+          {d.badge || '实测'}
+        </div>
+        <div style={{ textShadow: '0 4px 28px rgba(0,0,0,.68)' }}>
+          <Title text={d.title} highlight={d.highlight} p={{ ink: '#FFFFFF', accent: '#FFD43B', soft: 'rgba(0,0,0,.38)' }} />
+        </div>
+        {d.sub ? <div style={{ fontSize: 54, fontWeight: 500, color: 'rgba(255,255,255,.9)', textShadow: '0 2px 16px rgba(0,0,0,.6)' }}>{d.sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export const TEMPLATES = {
+  V_PHOTO: { name: '图底大字报', Comp: V_PHOTO, defaultScheme: 'cream' },
   V01: { name: '纯色大字报', Comp: V01, defaultScheme: 'cream' },
   V03: { name: '数字爆炸', Comp: V03, defaultScheme: 'klein' },
   V07: { name: '红黑警告', Comp: V07, defaultScheme: 'alert' },

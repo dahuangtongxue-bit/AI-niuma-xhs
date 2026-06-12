@@ -44,7 +44,10 @@ export async function POST(req) {
       const choice = data?.choices?.[0];
       let content = choice?.message?.content ?? choice?.text ?? '';
       if (Array.isArray(content)) content = content.map((c) => c?.text || '').join('');
-      content = String(content).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      content = String(content).replace(/<think>[\s\S]*?<\/think>/gi, '');
+      const ti = content.search(/<think>/i);
+      if (ti >= 0) content = content.slice(0, ti);
+      content = content.trim();
       if (!content) {
         const hasReasoning = !!choice?.message?.reasoning_content;
         const fr = choice?.finish_reason || '?';

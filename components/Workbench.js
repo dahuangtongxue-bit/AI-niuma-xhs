@@ -53,7 +53,7 @@ export default function Workbench({ profile, onRetrain }) {
         },
       });
       setStatus('done');
-      try { localStorage.setItem(todayKey(), JSON.stringify(collected)); } catch (e) { /* 容量超限忽略 */ }
+      try { localStorage.setItem(todayKey(), JSON.stringify(collected, (k, v) => (k === 'bgDataUrl' ? undefined : v))); } catch (e) { /* 容量超限忽略 */ }
     } catch (e) {
       setStatus(notes.length > 0 ? 'done' : 'idle');
       setError(String(e.message || e));

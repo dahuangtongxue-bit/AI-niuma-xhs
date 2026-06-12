@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 
-// 单一代理：所有 LLM 调用走这里。环境变量见 .env.example
+// 单一代理（流式直通版）：向上游请求 SSE，首字节即开始转发，
+// 绕开 Netlify Edge 的首字节时限——慢模型/长输出不再被平台掐成 504。
 export async function POST(req) {
   try {
     const { messages, temperature = 0.7, max_tokens = 4000, judge = false } = await req.json();
@@ -24,7 +25,7 @@ export async function POST(req) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({ model, messages, temperature, max_tokens, stream: false }),
+      body: JSON.stringify({ model, messages, temperature, max_tokens, stream: true }),
     });
 
     if (!upstream.ok) {
@@ -35,28 +36,39 @@ export async function POST(req) {
       );
     }
 
-    const data = await upstream.json();
-    const choice = data?.choices?.[0];
+    const ct = upstream.headers.get('content-type') || '';
 
-    // 兼容多种返回形态：content 字符串 / content 数组 / text 字段
-    let content = choice?.message?.content ?? choice?.text ?? '';
-    if (Array.isArray(content)) content = content.map((c) => c?.text || '').join('');
-    // 剥离思考型模型的 <think> 段
-    content = String(content).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-    if (!content) {
-      const hasReasoning = !!choice?.message?.reasoning_content;
-      const fr = choice?.finish_reason || '?';
-      return Response.json(
-        {
-          error: hasReasoning
-            ? '上游只返回了思考过程没有正文：当前 LLM_MODEL 是思考型（reasoning）模型，请换非思考版，或显著调大 max_tokens'
-            : `上游返回空内容（finish_reason=${fr}${fr === 'length' ? '，输出被截断，请调大 max_tokens 或换模型' : ''}）`,
-        },
-        { status: 502 }
-      );
+    // 网关忽略 stream 参数、直接回 JSON 的兼容路径
+    if (!ct.includes('event-stream')) {
+      const data = await upstream.json().catch(() => null);
+      const choice = data?.choices?.[0];
+      let content = choice?.message?.content ?? choice?.text ?? '';
+      if (Array.isArray(content)) content = content.map((c) => c?.text || '').join('');
+      content = String(content).replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      if (!content) {
+        const hasReasoning = !!choice?.message?.reasoning_content;
+        const fr = choice?.finish_reason || '?';
+        return Response.json(
+          {
+            error: hasReasoning
+              ? '上游只返回了思考过程没有正文：当前 LLM_MODEL 是思考型（reasoning）模型，请换非思考版'
+              : `上游返回空内容（finish_reason=${fr}${fr === 'length' ? '，输出被截断，请调大 max_tokens' : ''}）`,
+          },
+          { status: 502 }
+        );
+      }
+      return Response.json({ content });
     }
-    return Response.json({ content });
+
+    // SSE 直通
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
+    });
   } catch (e) {
     return Response.json({ error: String(e?.message || e) }, { status: 500 });
   }

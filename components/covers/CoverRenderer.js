@@ -17,7 +17,8 @@ export default function CoverRenderer({ cover, width = 300, filename = '封面' 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const tpl = TEMPLATES[cover?.template] || TEMPLATES.V01;
+  const hasBg = !!cover?.bgDataUrl;
+  const tpl = hasBg ? TEMPLATES.V_PHOTO : (TEMPLATES[cover?.template] || TEMPLATES.V01);
   const scheme = cover?.template === 'V07'
     ? 'alert'
     : (PALETTES[cover?.scheme] ? cover.scheme : tpl.defaultScheme);

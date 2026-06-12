@@ -95,7 +95,7 @@ export default function Workbench({ profile, onRetrain }) {
       {error ? (
         <div className="card errorCard">
           生产中断：{error}
-          <div className="errorHint">常见原因：Netlify 未配置 LLM_API_BASE / LLM_API_KEY / LLM_MODEL，或网关额度不足。</div>
+          <div className="errorHint">排查：① 看右侧工作日志底部「笔记X 生产失败」的具体原因；② 含 429 → 网关并发/频率限流（已自动串行+重试，仍超限请调网关额度）；③ 含「思考过程/空内容」→ LLM_MODEL 换成非思考版模型；④ 含 504/超时 → 模型出字太慢，换更快的模型。</div>
         </div>
       ) : null}
 

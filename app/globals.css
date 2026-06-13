@@ -350,3 +350,19 @@ input:focus, textarea:focus, select:focus {
   .noteCover { display: flex; justify-content: center; }
   .onboardHero h1 { font-size: 30px; }
 }
+
+/* —— 停止按钮 —— */
+.btnStop { background: #555; color: #fff; }
+.btnStop:hover { background: #444; }
+
+/* —— 入职：分段Tab/缩略图/双列/提示 —— */
+.segTabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.segTab { flex: 1; padding: 10px; border: 1.5px solid var(--line, #E9E4D8); background: var(--card,#fff); border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 700; color: var(--ink2,#6B665B); }
+.segTab.on { border-color: var(--tao,#FF2442); background: #FFF3F5; color: var(--tao,#FF2442); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.thumbRow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.thumb { position: relative; width: 70px; height: 70px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line,#E9E4D8); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
+.hintNote { font-size: 12.5px; color: var(--ink2,#6B665B); background: var(--soft,#F3EFE5); border-radius: 8px; padding: 9px 12px; margin: 6px 0; line-height: 1.6; }
+@media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }

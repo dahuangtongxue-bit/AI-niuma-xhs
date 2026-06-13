@@ -22,6 +22,10 @@ export async function POST(req) {
       return Response.json({ error: '缺少 prompt' }, { status: 400 });
     }
 
+    // 封面为 3:4 竖图。默认 1664x2208（≈367万像素，贴合主流生图模型"≥368万/1920×1920"的下限且保持竖构图）。
+    // 不同模型对尺寸要求不一：可用环境变量 IMAGE_SIZE 覆盖（如即梦/火山系最低 1920x1920；部分模型只收枚举档位）。
+    const imgSize = size || process.env.IMAGE_SIZE || '1664x2208';
+
     const upstream = await fetch(`${base}/images/generations`, {
       method: 'POST',
       headers: {
@@ -32,7 +36,7 @@ export async function POST(req) {
         model,
         prompt,
         n: 1,
-        size: size || process.env.IMAGE_SIZE || '1024x1024',
+        size: imgSize,
       }),
     });
 

@@ -14,6 +14,7 @@ const todayKey = () => {
 export default function Workbench({ profile, onRetrain }) {
   const [hot, setHot] = useState('');
   const [status, setStatus] = useState('idle'); // idle | working | done
+  const stopRef = useRef({ stop: false });
   const [logs, setLogs] = useState([]);
   const [notes, setNotes] = useState([]);
   const [error, setError] = useState('');
@@ -31,7 +32,12 @@ export default function Workbench({ profile, onRetrain }) {
     } catch (e) { /* 忽略坏数据 */ }
   }, []);
 
+  function stopWork() {
+    stopRef.current.stop = true;
+  }
+
   async function start() {
+    stopRef.current = { stop: false };
     setStatus('working');
     setError('');
     setNotes([]);
@@ -42,6 +48,7 @@ export default function Workbench({ profile, onRetrain }) {
       await runProduction({
         profile,
         hot: hot.trim(),
+        shouldStop: () => stopRef.current.stop,
         onLog: (entry) => {
           collected.logs.push(entry);
           setLogs((prev) => [...prev, entry]);
@@ -85,8 +92,11 @@ export default function Workbench({ profile, onRetrain }) {
           />
         </div>
         <div className="controlRight">
-          <button className="btn btnPrimary btnBig" onClick={start} disabled={status === 'working'}>
-            {status === 'working' ? '阿桃工作中…' : status === 'done' ? '重新生产今日内容' : '阿桃，开工'}
+          <button
+            className={`btn btnBig ${status === 'working' ? 'btnStop' : 'btnPrimary'}`}
+            onClick={status === 'working' ? stopWork : start}
+          >
+            {status === 'working' ? '⏹ 阿桃工作中…点此叫停' : status === 'done' ? '重新生产今日内容' : '阿桃，开工'}
           </button>
           <div className="controlHint">交付物：3 套完整笔记（封面图＋标题＋正文＋标签）</div>
         </div>

@@ -401,3 +401,14 @@ input:focus, textarea:focus, select:focus {
 .notePhotosLabel { font-size: 11.5px; color: var(--ink3,#A39E92); margin-bottom: 6px; }
 .notePhotosRow { display: flex; gap: 6px; flex-wrap: wrap; }
 .notePhotosRow img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line,#E9E4D8); display: block; }
+
+/* —— 发布备料区 —— */
+.publishBar { background: linear-gradient(180deg, #FFF8F0, #FFFFFF); border: 1.5px solid #FFE0C2; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px; }
+.publishSteps { display: flex; gap: 8px; flex-wrap: wrap; }
+.pStep { font-size: 12px; color: #B9770E; background: #FFF0DC; border-radius: 999px; padding: 4px 12px; font-weight: 600; }
+.publishBtns { display: flex; gap: 10px; flex-wrap: wrap; }
+.publishBtns .btn { flex: 1; min-width: 200px; }
+.btnDark { background: #1B1812; color: #fff; }
+.btnDark:hover { background: #322c22; }
+.btnDark.btnSmall { padding: 9px 14px; }
+@media (max-width: 600px) { .publishBtns .btn { min-width: 100%; } }

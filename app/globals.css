@@ -366,3 +366,38 @@ input:focus, textarea:focus, select:focus {
 .thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
 .hintNote { font-size: 12.5px; color: var(--ink2,#6B665B); background: var(--soft,#F3EFE5); border-radius: 8px; padding: 9px 12px; margin: 6px 0; line-height: 1.6; }
 @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* —— 工作模式切换 Tab —— */
+.modeTabs { display: flex; gap: 10px; margin-bottom: 14px; }
+.modeTab { flex: 1; padding: 14px 16px; border: 1.5px solid var(--line, #E9E4D8); background: var(--card,#fff); border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 800; color: var(--ink2,#6B665B); display: flex; flex-direction: column; align-items: center; gap: 3px; transition: .2s; }
+.modeTab span { font-size: 12px; font-weight: 400; color: var(--ink3,#A39E92); }
+.modeTab.on { border-color: var(--tao,#FF2442); background: #FFF3F5; color: var(--tao,#FF2442); }
+.modeTab.on span { color: #C0392B; }
+
+/* —— 投喂面板 —— */
+.feedControlCard { display: block; }
+.feedPanel { display: flex; flex-direction: column; gap: 18px; }
+.feedRow { display: flex; gap: 16px; }
+.feedRow2 { flex-wrap: wrap; }
+.feedField { flex: 1; min-width: 0; }
+.feedFieldSm { flex: 0 0 240px; }
+.feedField .sectionLabel i { color: var(--tao,#FF2442); font-style: normal; }
+.feedField input[type=text], .feedField input:not([type]), .feedField select { width: 100%; }
+.feedThumbs { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.feedThumb { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; border: 2px solid var(--line,#E9E4D8); cursor: pointer; }
+.feedThumb.isCover { border-color: var(--tao,#FF2442); }
+.feedThumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.feedThumb .coverTag { position: absolute; left: 0; bottom: 0; right: 0; background: var(--tao,#FF2442); color: #fff; font-size: 10px; text-align: center; padding: 2px 0; font-weight: 700; }
+.feedThumb .thumbDel { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; }
+.feedNoImg { font-size: 12.5px; color: var(--ink3,#A39E92); background: var(--soft,#F3EFE5); border-radius: 8px; padding: 9px 12px; margin-top: 8px; line-height: 1.6; }
+.feedCheck { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink2,#6B665B); margin-top: 10px; cursor: pointer; }
+.toneChips { display: flex; gap: 8px; flex-wrap: wrap; }
+.toneChip { padding: 8px 16px; border: 1.5px solid var(--line,#E9E4D8); background: var(--card,#fff); border-radius: 999px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--ink2,#6B665B); }
+.toneChip.on { border-color: var(--tao,#FF2442); background: #FFF3F5; color: var(--tao,#FF2442); }
+@media (max-width: 640px) { .feedRow { flex-direction: column; } .feedFieldSm { flex: 1; } .modeTab { font-size: 14px; } }
+
+/* —— 笔记配图素材 —— */
+.notePhotos { margin-top: 12px; }
+.notePhotosLabel { font-size: 11.5px; color: var(--ink3,#A39E92); margin-bottom: 6px; }
+.notePhotosRow { display: flex; gap: 6px; flex-wrap: wrap; }
+.notePhotosRow img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line,#E9E4D8); display: block; }

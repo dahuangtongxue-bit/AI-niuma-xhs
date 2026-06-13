@@ -1,69 +1,77 @@
 export const runtime = 'edge';
 
-// 生图代理：OpenAI 兼容 images/generations。
-// 关键设计：无论上游返回 b64_json 还是 url，统一在服务端转成 dataUrl 再给前端——
-// 远程图片 URL 会让前端 canvas 跨域污染，导致封面 PNG 导出失败，base64 直传则没有这个问题。
+// 单一代理（流式直通版）：向上游请求 SSE，首字节即开始转发，
+// 绕开 Netlify Edge 的首字节时限——慢模型/长输出不再被平台掐成 504。
 export async function POST(req) {
   try {
-    const { prompt, size } = await req.json();
+    const { messages, temperature = 0.7, max_tokens = 4000, judge = false } = await req.json();
 
-    const base = (process.env.IMAGE_API_BASE || process.env.LLM_API_BASE || '').replace(/\/+$/, '');
-    const key = process.env.IMAGE_API_KEY || process.env.LLM_API_KEY;
-    const model = process.env.IMAGE_MODEL;
+    const base = (process.env.LLM_API_BASE || '').replace(/\/+$/, '');
+    const key = process.env.LLM_API_KEY;
+    const model = judge
+      ? (process.env.LLM_MODEL_JUDGE || process.env.LLM_MODEL)
+      : process.env.LLM_MODEL;
 
-    if (!model) {
-      // 约定：未配置 IMAGE_MODEL = 生图层关闭（前端据 501 静默降级，不算错误）
-      return Response.json({ error: 'IMAGE_MODEL 未配置，生图层关闭' }, { status: 501 });
-    }
-    if (!base || !key) {
-      return Response.json({ error: '缺少 IMAGE_API_BASE / IMAGE_API_KEY（或回退用的 LLM_API_BASE / LLM_API_KEY）' }, { status: 500 });
-    }
-    if (!prompt) {
-      return Response.json({ error: '缺少 prompt' }, { status: 400 });
+    if (!base || !key || !model) {
+      return Response.json(
+        { error: '缺少环境变量：请在 Netlify 配置 LLM_API_BASE / LLM_API_KEY / LLM_MODEL' },
+        { status: 500 }
+      );
     }
 
-    const upstream = await fetch(`${base}/images/generations`, {
+    const upstream = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({
-        model,
-        prompt,
-        n: 1,
-        size: size || process.env.IMAGE_SIZE || '1024x1024',
-      }),
+      body: JSON.stringify({ model, messages, temperature, max_tokens, stream: true }),
     });
 
     if (!upstream.ok) {
       const text = await upstream.text();
-      return Response.json({ error: `生图上游 ${upstream.status}：${text.slice(0, 300)}` }, { status: 502 });
+      return Response.json(
+        { error: `上游 ${upstream.status}：${text.slice(0, 300)}` },
+        { status: 502 }
+      );
     }
 
-    const data = await upstream.json();
-    const item = data?.data?.[0] || {};
+    const ct = upstream.headers.get('content-type') || '';
 
-    if (item.b64_json) {
-      return Response.json({ dataUrl: `data:image/png;base64,${item.b64_json}` });
-    }
-
-    if (item.url) {
-      const img = await fetch(item.url);
-      if (!img.ok) {
-        return Response.json({ error: `取回生成图失败 ${img.status}` }, { status: 502 });
+    // 网关忽略 stream 参数、直接回 JSON 的兼容路径
+    if (!ct.includes('event-stream')) {
+      const data = await upstream.json().catch(() => null);
+      const choice = data?.choices?.[0];
+      let content = choice?.message?.content ?? choice?.text ?? '';
+      if (Array.isArray(content)) content = content.map((c) => c?.text || '').join('');
+      content = String(content).replace(/<think>[\s\S]*?<\/think>/gi, '');
+      const ti = content.search(/<think>/i);
+      if (ti >= 0) content = content.slice(0, ti);
+      content = content.trim();
+      if (!content) {
+        const hasReasoning = !!choice?.message?.reasoning_content;
+        const fr = choice?.finish_reason || '?';
+        return Response.json(
+          {
+            error: hasReasoning
+              ? '上游只返回了思考过程没有正文：当前 LLM_MODEL 是思考型（reasoning）模型，请换非思考版'
+              : `上游返回空内容（finish_reason=${fr}${fr === 'length' ? '，输出被截断，请调大 max_tokens' : ''}）`,
+          },
+          { status: 502 }
+        );
       }
-      const bytes = new Uint8Array(await img.arrayBuffer());
-      let binary = '';
-      const chunk = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-      }
-      const ct = img.headers.get('content-type') || 'image/png';
-      return Response.json({ dataUrl: `data:${ct};base64,${btoa(binary)}` });
+      return Response.json({ content });
     }
 
-    return Response.json({ error: '生图返回中没有图片（缺 url / b64_json 字段）' }, { status: 502 });
+    // SSE 直通
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
+    });
   } catch (e) {
     return Response.json({ error: String(e?.message || e) }, { status: 500 });
   }

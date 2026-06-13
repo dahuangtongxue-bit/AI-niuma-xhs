@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { TEMPLATES, PALETTES } from './templates';
 
 const W = 1242;
@@ -8,11 +8,10 @@ const H = 1660;
 
 /**
  * 封面预览 + 导出
- * props: cover = {template, scheme, title, highlight, sub, num, unit, points, badge}
- *        width = 预览宽度(px)
- *        filename = 下载文件名
+ * props: cover, width, filename
+ * ref:   { getPngDataUrl() } —— 供父组件"一键下载全部图片"编排使用
  */
-export default function CoverRenderer({ cover, width = 300, filename = '封面' }) {
+const CoverRenderer = forwardRef(function CoverRenderer({ cover, width = 300, filename = '封面' }, ref) {
   const nodeRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -30,19 +29,23 @@ export default function CoverRenderer({ cover, width = 300, filename = '封面' 
   const scale = width / W;
   const Comp = tpl.Comp;
 
+  async function getPngDataUrl() {
+    if (!nodeRef.current) return null;
+    const { toPng } = await import('html-to-image');
+    return toPng(nodeRef.current, {
+      width: W, height: H, pixelRatio: 1, cacheBust: true, style: { transform: 'none' },
+    });
+  }
+
+  // 暴露给父组件
+  useImperativeHandle(ref, () => ({ getPngDataUrl }), []);
+
   async function exportPng() {
-    if (!nodeRef.current || busy) return;
+    if (busy) return;
     setBusy(true);
     setErr('');
     try {
-      const { toPng } = await import('html-to-image');
-      const dataUrl = await toPng(nodeRef.current, {
-        width: W,
-        height: H,
-        pixelRatio: 1,
-        cacheBust: true,
-        style: { transform: 'none' },
-      });
+      const dataUrl = await getPngDataUrl();
       const a = document.createElement('a');
       a.href = dataUrl;
       a.download = `${filename}_${tpl.name}.png`;
@@ -67,4 +70,6 @@ export default function CoverRenderer({ cover, width = 300, filename = '封面' 
       {err ? <div className="hintErr">{err}</div> : null}
     </div>
   );
-}
+});
+
+export default CoverRenderer;

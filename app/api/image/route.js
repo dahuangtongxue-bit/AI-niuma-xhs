@@ -32,7 +32,7 @@ export async function POST(req) {
         model,
         prompt,
         n: 1,
-        size: size || process.env.IMAGE_SIZE || '1728x2304',
+        size: size || process.env.IMAGE_SIZE || '2K',
       }),
     });
 

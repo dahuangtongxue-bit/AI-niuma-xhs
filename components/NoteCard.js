@@ -39,6 +39,18 @@ export default function NoteCard({ note, index }) {
       <div className="noteBody">
         <div className="noteCover">
           <CoverRenderer cover={note.cover} width={280} filename={`笔记${index + 1}封面`} />
+          {note.photos && note.photos.length ? (
+            <div className="notePhotos">
+              <div className="notePhotosLabel">本篇配图素材（发布时可直接用）</div>
+              <div className="notePhotosRow">
+                {note.photos.map((src, i) => (
+                  <a href={src} download={`笔记${index + 1}_配图${i + 1}.jpg`} key={i} title="点击下载">
+                    <img src={src} alt="" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="noteContent">

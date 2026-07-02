@@ -1,115 +1,146 @@
-// ============================================================================
-//  司南 · 资料文档解析（浏览器端）
-//  把 txt / Word / Excel / PPT / PDF 降解成纯文本，喂给识别接口建档。
-//  全部按需动态加载（不拖慢首屏）；解析失败给出明确提示。
-// ============================================================================
-'use client';
+export const runtime = 'edge';
 
-const MAX_CHARS_PER_FILE = 8000; // 单文件文本上限（防止超长撑爆prompt）
+// 素材提取代理：把"链接抓取"和"多模态读图"两种素材，统一交给模型整理成「店铺档案 JSON」。
+// 注意：本路由只负责"取素材 + 调模型整理"，结果必须回前端让用户过目确认后才入库（AI 看图/读网页会出错，不能直接进生产）。
 
-function clip(text) {
-  const t = (text || '').replace(/\u0000/g, '').replace(/[ \t]+\n/g, '\n').trim();
-  return t.length > MAX_CHARS_PER_FILE ? t.slice(0, MAX_CHARS_PER_FILE) + '\n…（内容过长已截断）' : t;
+const FIELDS = `{
+  "name": "店名（招牌上的正式名称，没有就留空）",
+  "category": "品类，如 兰州牛肉面 / 咖啡馆 / 火锅",
+  "city": "所在城市",
+  "area": "商圈/地址（有多详细写多详细，至少到街道或商圈）",
+  "persona": "老板/品牌人设一句话，如 '在苏州开店的兰州人，做正宗牛大'",
+  "perCapita": "人均消费，如 25元",
+  "hours": "营业时间",
+  "signatures": ["招牌项目1（菜品/服务，带一个真实细节）", "招牌项目2", "招牌项目3"],
+  "differentiators": ["和同行不一样的真实差异点1", "差异点2"],
+  "highlights": ["可写成笔记的真实亮点/故事1", "亮点2"],
+  "landing": "引流/到店信息：地址定位、预约或排队方式、私域入口（如有）",
+  "tabooConfirmed": "若素材里有明显夸大宣传（最好吃/第一），这里列出来提醒用户别写"
+}`;
+
+function buildMessages({ pageText, hasImages }) {
+  const sys = `你是商户信息整理员。根据用户提供的素材（网页正文 / 店铺截图 / 菜单门头照片），如实整理出一份「店铺档案 JSON」，供后续小红书运营创作使用。
+铁律：
+1. 只整理素材里**真实出现**的信息，绝对禁止编造店名、地址、菜品、价格——素材里没有的字段就留空字符串或空数组；
+2. signatures/highlights 要保留能写进笔记的真实细节（如"汤每天凌晨现熬""面型分九种"），不要泛泛而谈；
+3. 如果素材里有"最好吃/全城第一/绝对正宗"这类违反广告法的话，放进 tabooConfirmed 提醒，不要当成卖点；
+4. 严格只输出 JSON 本体，第一个字符是 {，禁止任何解释或代码围栏。
+输出字段：
+${FIELDS}`;
+
+  const userContent = [];
+  if (pageText) {
+    userContent.push({ type: 'text', text: `【网页/文章正文素材】\n${pageText.slice(0, 8000)}` });
+  }
+  if (hasImages) {
+    userContent.push({ type: 'text', text: '【以下是店铺相关图片：可能是大众点评页截图、菜单、门头、营业执照等，请从中识别真实信息】' });
+  }
+  // 图片块由调用处 push 进来（见下）
+  return { sys, userContent };
 }
 
-const extOf = (name) => (name.split('.').pop() || '').toLowerCase();
-
-// 主入口：返回 { kind:'text', name, content } 或 { kind:'images', name, images:[dataURL] } 或抛错
-export async function extractDoc(file) {
-  const ext = extOf(file.name);
-
-  if (ext === 'txt' || ext === 'md' || ext === 'csv') {
-    return { kind: 'text', name: file.name, content: clip(await file.text()) };
-  }
-
-  if (ext === 'docx') {
-    const mammoth = await import('mammoth');
-    const { value } = await (mammoth.default || mammoth).extractRawText({ arrayBuffer: await file.arrayBuffer() });
-    return { kind: 'text', name: file.name, content: clip(value) };
-  }
-
-  if (ext === 'xlsx' || ext === 'xls') {
-    const XLSX = await import('xlsx');
-    const wb = (XLSX.default || XLSX).read(await file.arrayBuffer(), { type: 'array' });
-    const X = XLSX.default || XLSX;
-    const parts = [];
-    for (const sn of wb.SheetNames.slice(0, 5)) {
-      const csv = X.utils.sheet_to_csv(wb.Sheets[sn]);
-      if (csv.trim()) parts.push(`【表：${sn}】\n${csv}`);
-    }
-    return { kind: 'text', name: file.name, content: clip(parts.join('\n\n')) };
-  }
-
-  if (ext === 'pptx') {
-    const JSZipMod = await import('jszip');
-    const JSZip = JSZipMod.default || JSZipMod;
-    const zip = await JSZip.loadAsync(await file.arrayBuffer());
-    const slideNames = Object.keys(zip.files)
-      .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-      .sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
-    const parts = [];
-    for (const sn of slideNames.slice(0, 40)) {
-      const xml = await zip.files[sn].async('string');
-      const texts = [...xml.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)].map((m) => m[1]).filter(Boolean);
-      if (texts.length) parts.push(`【第${sn.match(/\d+/)[0]}页】${texts.join(' ')}`);
-    }
-    if (!parts.length) throw new Error('这份PPT没有可提取的文字（可能是纯图片页），请截图上传');
-    return { kind: 'text', name: file.name, content: clip(parts.join('\n')) };
-  }
-
-  if (ext === 'pdf') {
-    return await extractPdf(file);
-  }
-
-  if (ext === 'doc' || ext === 'ppt') {
-    throw new Error(`老版 .${ext} 格式暂不支持，请另存为 .${ext}x 或截图上传`);
-  }
-
-  throw new Error(`不支持的文件类型 .${ext}`);
-}
-
-// PDF：优先提取文本层；文本太少（扫描版）则渲染前2页成图片走视觉识别
-async function extractPdf(file) {
-  // 用 pdfjs 3.x：主库是 UMD（不含 import.meta.url 的 worker 引用，
-  // 不会把 .mjs worker 连带打进构建）；worker 是经典 .js，压缩器可正常处理。
-  // —— 4.x 无论怎么配 workerSrc，webpack 都会静态打包其 .mjs worker 导致构建失败。
-  const m = await import('pdfjs-dist/legacy/build/pdf');
-  const pdfjs = m.default || m;
+export async function POST(req) {
   try {
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/legacy/build/pdf.worker.min.js', import.meta.url
-    ).toString();
-  } catch (e) { /* 配不上则解析时会报错，外层会提示该PDF改用截图 */ }
+    const body = await req.json();
+    const { url, images, texts } = body; // images: ['data:image/...;base64,...'] 前端传入
 
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-  const nPages = Math.min(doc.numPages, 15);
-  const parts = [];
-  for (let i = 1; i <= nPages; i++) {
-    const page = await doc.getPage(i);
-    const tc = await page.getTextContent();
-    const t = tc.items.map((it) => it.str).join(' ').trim();
-    if (t) parts.push(`【第${i}页】${t}`);
-  }
-  const text = parts.join('\n');
+    // 读图模型可独立部署（如 deepseek 走官网、MiniMax 也走官网，两套 base/key 不同）。
+    // 优先用 VISION_API_BASE / VISION_API_KEY / LLM_MODEL_VISION；任一缺省则回退复用 LLM_* 那套。
+    const base = (process.env.VISION_API_BASE || process.env.LLM_API_BASE || '').replace(/\/+$/, '');
+    const key = process.env.VISION_API_KEY || process.env.LLM_API_KEY;
+    const model = process.env.LLM_MODEL_VISION || process.env.LLM_MODEL;
 
-  if (text.replace(/【第\d+页】/g, '').trim().length >= 60) {
-    return { kind: 'text', name: file.name, content: clip(text) };
-  }
+    if (!base || !key || !model) {
+      return Response.json({ error: '缺少环境变量：读图需要 VISION_API_BASE / VISION_API_KEY / LLM_MODEL_VISION（或回退用的 LLM_API_BASE / LLM_API_KEY / LLM_MODEL）' }, { status: 500 });
+    }
 
-  // 文本太少 → 扫描版PDF，渲染前2页成图片
-  const images = [];
-  for (let i = 1; i <= Math.min(doc.numPages, 2); i++) {
-    const page = await doc.getPage(i);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width; canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    images.push(canvas.toDataURL('image/jpeg', 0.85));
+    let pageText = '';
+    let fetchNote = '';
+    // ── 链接抓取（官网/公众号文章可行；大众点评等强反爬大概率失败，失败就提示改用截图）──
+    if (url && /^https?:\/\//i.test(url)) {
+      try {
+        const resp = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+          },
+        });
+        if (resp.ok) {
+          const html = await resp.text();
+          pageText = html
+            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (pageText.length < 80) {
+            fetchNote = '该链接抓到的正文极少（可能是反爬或动态渲染页面，如大众点评）。建议改用「上传截图」方式提供素材。';
+          }
+        } else {
+          fetchNote = `链接抓取失败（${resp.status}）。如果是大众点评这类强反爬站点，请改用「上传截图」。`;
+        }
+      } catch (e) {
+        fetchNote = `链接无法访问（${String(e.message || e).slice(0, 80)}）。可改用「上传截图」提供素材。`;
+      }
+    }
+
+    // ── 资料文档文本（前端解析的 PDF/Word/Excel/PPT/txt）拼进正文一起识别 ──
+    const docs = Array.isArray(texts) ? texts.filter((t) => t && t.content).slice(0, 8) : [];
+    if (docs.length) {
+      const docText = docs.map((d) => `【文档：${String(d.name || '资料').slice(0, 60)}】\n${String(d.content).slice(0, 8000)}`).join('\n\n');
+      pageText = (pageText ? pageText + '\n\n' : '') + docText;
+    }
+
+    const imgs = Array.isArray(images) ? images.filter((s) => typeof s === 'string' && s.startsWith('data:image')).slice(0, 4) : [];
+
+    if (!pageText && imgs.length === 0) {
+      return Response.json({ error: fetchNote || '没有可用素材：请提供有效链接或上传图片/资料文档', fetchNote }, { status: 400 });
+    }
+
+    const { sys, userContent } = buildMessages({ pageText, hasImages: imgs.length > 0 });
+    for (const dataUrl of imgs) {
+      userContent.push({ type: 'image_url', image_url: { url: dataUrl } });
+    }
+
+    const upstream = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: userContent },
+        ],
+        temperature: 0.3,
+        max_tokens: 3000,
+        stream: false,
+        // MiniMax-M3 默认自适应思考会吐 reasoning_content、烧 token；显式关闭。非 MiniMax 网关会忽略此字段，无害。
+        thinking: { type: 'disabled' },
+      }),
+    });
+
+    if (!upstream.ok) {
+      const text = await upstream.text();
+      return Response.json({ error: `提取模型 ${upstream.status}：${text.slice(0, 300)}（若提示不支持图片，请把 LLM_MODEL_VISION 配成多模态模型，如 MiniMax）` }, { status: 502 });
+    }
+
+    const data = await upstream.json();
+    const choice = data?.choices?.[0];
+    let content = choice?.message?.content ?? '';
+    if (Array.isArray(content)) content = content.map((c) => c?.text || '').join('');
+    content = String(content).replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```json|```/gi, '').trim();
+
+    let profile = null;
+    try {
+      const m = content.match(/\{[\s\S]*\}/);
+      profile = JSON.parse(m ? m[0] : content);
+    } catch (e) {
+      return Response.json({ error: '模型返回的档案无法解析，请重试或改用手动填写', raw: content.slice(0, 200) }, { status: 502 });
+    }
+
+    return Response.json({ profile, fetchNote, usedImages: imgs.length, usedText: !!pageText });
+  } catch (e) {
+    return Response.json({ error: String(e?.message || e) }, { status: 500 });
   }
-  if (!images.length) throw new Error('这份PDF无法解析，请截图上传');
-  return { kind: 'images', name: file.name, images };
 }
-
-// 支持的扩展名（给 input accept 和提示用）
-export const DOC_EXTS = ['.txt', '.md', '.csv', '.pdf', '.docx', '.xlsx', '.xls', '.pptx'];
-export const ACCEPT = 'image/*,' + DOC_EXTS.join(',');

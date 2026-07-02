@@ -42,7 +42,7 @@ ${FIELDS}`;
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { url, images } = body; // images: ['data:image/...;base64,...'] 前端传入
+    const { url, images, texts } = body; // images: ['data:image/...;base64,...'] 前端传入
 
     // 读图模型可独立部署（如 deepseek 走官网、MiniMax 也走官网，两套 base/key 不同）。
     // 优先用 VISION_API_BASE / VISION_API_KEY / LLM_MODEL_VISION；任一缺省则回退复用 LLM_* 那套。
@@ -85,10 +85,17 @@ export async function POST(req) {
       }
     }
 
+    // ── 资料文档文本（前端解析的 PDF/Word/Excel/PPT/txt）拼进正文一起识别 ──
+    const docs = Array.isArray(texts) ? texts.filter((t) => t && t.content).slice(0, 8) : [];
+    if (docs.length) {
+      const docText = docs.map((d) => `【文档：${String(d.name || '资料').slice(0, 60)}】\n${String(d.content).slice(0, 8000)}`).join('\n\n');
+      pageText = (pageText ? pageText + '\n\n' : '') + docText;
+    }
+
     const imgs = Array.isArray(images) ? images.filter((s) => typeof s === 'string' && s.startsWith('data:image')).slice(0, 4) : [];
 
     if (!pageText && imgs.length === 0) {
-      return Response.json({ error: fetchNote || '没有可用素材：请提供有效链接或上传至少一张图片', fetchNote }, { status: 400 });
+      return Response.json({ error: fetchNote || '没有可用素材：请提供有效链接或上传图片/资料文档', fetchNote }, { status: 400 });
     }
 
     const { sys, userContent } = buildMessages({ pageText, hasImages: imgs.length > 0 });

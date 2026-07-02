@@ -36,7 +36,7 @@ export default function Page() {
       <div className="onboarding">
         <div className="lanyard" />
         <div className="onboardHero">
-          <h1>给你的店，雇一位<span className="hl">小红书运营专员</span></h1>
+          <h1>给你的品牌，雇一位<span className="hl">小红书运营专员</span></h1>
           <p>她叫阿桃。每天交付 3 套能直接发布的笔记：封面图、标题、正文、标签，一样不少。</p>
         </div>
         <div className="onboardGrid">
